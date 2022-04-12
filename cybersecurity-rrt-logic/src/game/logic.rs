@@ -57,10 +57,10 @@ mod tests {
 
         assert_eq!(state.operators().len(), 2);
         for (i, operator) in state.operators().iter().enumerate() {
-            assert_eq!(operator.left(), [NO_HACKER; 3]);
-            assert!(operator.right().is_empty());
-            assert_eq!(operator.talents().len(), 1);
-            assert_eq!(operator.talents()[0], operator_order[i]);
+            assert_eq!(operator.secure_slots(), [NO_HACKER; 3]);
+            assert!(operator.backtrace_list().is_empty());
+            assert_eq!(operator.skills().len(), 1);
+            assert_eq!(operator.skills()[0], operator_order[i]);
         }
     }
 }

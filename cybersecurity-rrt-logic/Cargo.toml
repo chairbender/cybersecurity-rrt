@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 arrayvec = "0.7.2"
+rand = "0.8.5"
 
 [dev-dependencies]
 test-case = "2.0.2"

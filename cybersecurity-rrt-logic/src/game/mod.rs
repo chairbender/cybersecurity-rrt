@@ -1,3 +1,4 @@
+use crate::defs;
 use crate::defs::*;
 use arrayvec::ArrayVec;
 use std::collections::HashSet;
@@ -131,10 +132,20 @@ type OperatorID = u8;
 /// a deck of hacker cards. The top is the end of the vec, bottom is the start.
 type HackerDeck = ArrayVec<HackerCard, 66>;
 
-struct HackerCard {
+#[derive(Copy, Clone)]
+pub struct HackerCard {
     hacker: HackerID,
     /// true if faceup (visible to players), otherwise facedown
     face_up: bool,
+}
+
+impl HackerCard {
+    pub fn new(hacker: HackerID) -> HackerCard {
+        HackerCard {
+            hacker,
+            face_up: false,
+        }
+    }
 }
 
 pub struct OperatorState {
@@ -146,11 +157,26 @@ pub struct OperatorState {
     /// hackers on right side of operator board - backtrace list - end of array = bottom (i.e. most recently placed)
     /// start = top
     backtrace_list: ArrayVec<HackerID, 13>,
+    /// whether there is a burnout token
+    burnout: bool,
+    /// whether they are in desperation mode
+    desperation: bool,
     /// which skills the operator currently has, including their own + any assist
     skills: ArrayVec<OperatorType, 7>,
 }
 
 impl OperatorState {
+    /// New operator in initial state they should be in at start of a game
+    pub fn new(operator: &OperatorType) -> OperatorState {
+        return OperatorState {
+            secure_slots: [NO_HACKER; 3],
+            backtrace_list: ArrayVec::new(),
+            burnout: false,
+            desperation: false,
+            skills: ArrayVec::from_iter([*operator]),
+        };
+    }
+
     pub fn secure_slots(&self) -> [HackerID; 3] {
         self.secure_slots
     }
@@ -159,6 +185,13 @@ impl OperatorState {
     }
     pub fn skills(&self) -> &ArrayVec<OperatorType, 7> {
         &self.skills
+    }
+
+    pub fn burnout(&self) -> bool {
+        self.burnout
+    }
+    pub fn desperation(&self) -> bool {
+        self.desperation
     }
 }
 

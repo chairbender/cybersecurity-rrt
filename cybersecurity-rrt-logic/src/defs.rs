@@ -91,9 +91,18 @@ pub enum OperatorType {
     /// Flow: Discard top 2 cards from Breach stack. Desperation: top 3 cards.
     Admin,
 }
-/// Index in defs::OPERATOR_TYPES
-pub type OperatorTypeID = u8;
-pub static OPERATOR_TYPES: [OperatorType; 7] = [Stone, Sniper, Rogue, Biggs, Rich, Charm, Admin];
+
+pub fn operator(operator: &OperatorType) -> Operator {
+    match operator {
+        Stone => Operator::STONE,
+        Sniper => Operator::SNIPER,
+        Rogue => Operator::ROGUE,
+        Rich => Operator::RICH,
+        Biggs => Operator::BIGGS,
+        Charm => Operator::CHARM,
+        Admin => Operator::ADMIN,
+    }
+}
 
 /// Definition of a particular hacker
 pub struct Hacker {

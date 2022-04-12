@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "cybersecurity-rrt-logic",
+    "cybersecurity-rrt",
+]

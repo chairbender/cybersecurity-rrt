@@ -42,13 +42,6 @@ impl GameConfig {
             operators,
         })
     }
-
-    pub fn operators(&self) -> &ArrayVec<OperatorType, 7> {
-        &self.operators
-    }
-    pub fn difficulty(&self) -> &Difficulty {
-        &self.difficulty
-    }
 }
 
 #[derive(Debug)]
@@ -90,39 +83,6 @@ pub struct TableState {
     operators: ArrayVec<OperatorState, 7>,
     /// current decision that needs to be made by a operator
     choice_state: ChoiceState,
-}
-
-impl TableState {
-    pub fn firewalls(&self) -> u8 {
-        self.firewalls
-    }
-    pub fn databases(&self) -> [bool; 3] {
-        self.databases
-    }
-    pub fn webservices(&self) -> [bool; 6] {
-        self.webservices
-    }
-    pub fn hackers(&self) -> &HackerDeck {
-        &self.hackers
-    }
-    pub fn breach(&self) -> &HackerDeck {
-        &self.breach
-    }
-    pub fn discard(&self) -> &HackerDeck {
-        &self.discard
-    }
-    pub fn round(&self) -> u8 {
-        self.round
-    }
-    pub fn active_operator(&self) -> OperatorID {
-        self.active_operator
-    }
-    pub fn operators(&self) -> &ArrayVec<OperatorState, 7> {
-        &self.operators
-    }
-    pub fn choice_state(&self) -> &ChoiceState {
-        &self.choice_state
-    }
 }
 
 /// Operator in current game. Index in TableState.operators and GameConfig.operators
@@ -176,23 +136,6 @@ impl OperatorState {
             skills: ArrayVec::from_iter([*operator]),
         };
     }
-
-    pub fn secure_slots(&self) -> [HackerID; 3] {
-        self.secure_slots
-    }
-    pub fn backtrace_list(&self) -> &ArrayVec<HackerID, 13> {
-        &self.backtrace_list
-    }
-    pub fn skills(&self) -> &ArrayVec<OperatorType, 7> {
-        &self.skills
-    }
-
-    pub fn burnout(&self) -> bool {
-        self.burnout
-    }
-    pub fn desperation(&self) -> bool {
-        self.desperation
-    }
 }
 
 /// Discrete states of the game where player input is required. Each state has associated actions
@@ -231,6 +174,18 @@ pub enum ChoiceState {
     GameOver,
 }
 
+/// Indicates a player's chosen action
+#[derive(PartialEq, Debug)]
+pub enum Choice {
+    /// draw and face next hacker from the hacker deck.
+    Face,
+    /// Give assist token to another operator
+    Assist(OperatorID),
+    /// Do nothing for he remainder of the round (also no longer suffer the penalty of the
+    /// last raider in the backtrace list)
+    Idle,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,7 +197,7 @@ mod tests {
         let config =
             GameConfig::new(Difficulty::Easy, ArrayVec::from_iter(operators.clone())).unwrap();
 
-        assert!(matches!(config.difficulty(), Difficulty::Easy));
+        assert!(matches!(config.difficulty, Difficulty::Easy));
         assert!(config.operators.iter().eq(operators.iter()));
     }
 

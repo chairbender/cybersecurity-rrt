@@ -1,32 +1,54 @@
+/// Actual logic to run a complete game
 use super::{GameConfig, TableState};
 use crate::defs;
 use crate::defs::OperatorType;
 use crate::game::ChoiceState::ChooseAction;
 use crate::game::Difficulty::Easy;
-use crate::game::{Difficulty, HackerCard, HackerDeck, OperatorState};
+use crate::game::{Choice, Difficulty, HackerCard, HackerDeck, OperatorID, OperatorState};
 use arrayvec::ArrayVec;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::Rng;
 
-/// Actual logic to run a complete game
+impl TableState {
+    /// Returns a tablestate fully setup in accordance with
+    /// the provided game config, ready for the first operator to perform their turn.
+    pub fn setup_game(config: &GameConfig) -> TableState {
+        let (firewall_mod, hacker_mult) = difficulty_mod(&config.difficulty);
+        TableState {
+            firewalls: (config.operators.len() + firewall_mod) as u8,
+            databases: [true; 3],
+            webservices: [true; 6],
+            hackers: shuffle(config.operators.len() * hacker_mult),
+            breach: HackerDeck::new(),
+            discard: HackerDeck::new(),
+            round: 0,
+            active_operator: 0,
+            operators: init_operators(&config.operators),
+            choice_state: ChooseAction(0),
+        }
+    }
 
-/// Returns a tablestate fully setup in accordance with
-/// the provided game config, ready for the first operator to perform their turn.
-pub fn setup_game(config: &GameConfig) -> TableState {
-    let (firewall_mod, hacker_mult) = difficulty_mod(config.difficulty());
-    TableState {
-        firewalls: (config.operators().len() + firewall_mod) as u8,
-        databases: [true; 3],
-        webservices: [true; 6],
-        hackers: shuffle(config.operators().len() * hacker_mult),
-        breach: HackerDeck::new(),
-        discard: HackerDeck::new(),
-        round: 0,
-        active_operator: 0,
-        operators: init_operators(config.operators()),
-        choice_state: ChooseAction(0),
+    /// Returns the valid choices that can be performed based on current game state
+    pub fn valid_choices(&self) -> Vec<Choice> {
+        match self.choice_state {
+            ChooseAction(operator) => {
+                let mut choices = vec![Choice::Idle];
+                if !self.hackers.is_empty() {
+                    choices.push(Choice::Face);
+                }
+                for i in 0..self.operators.len() {
+                    if i != operator as usize {
+                        choices.push(Choice::Assist(i as OperatorID));
+                    }
+                }
+                choices
+            }
+            _ => panic!("choice state not implemented"),
+        }
     }
 }
+
+// TODO: Convert to impl
 /// Gets (firewall mod, hacker_multiplier) depending on difficulty
 fn difficulty_mod(difficulty: &Difficulty) -> (usize, usize) {
     match difficulty {
@@ -63,8 +85,20 @@ mod tests {
     use super::*;
     use crate::defs;
     use crate::defs::{OperatorType, NO_HACKER};
+    use crate::game::OperatorID;
     use arrayvec::ArrayVec;
+    use spectral::prelude::*;
     use test_case::test_case;
+
+    static OPERATORS: [OperatorType; 7] = [
+        OperatorType::Stone,
+        OperatorType::Sniper,
+        OperatorType::Rogue,
+        OperatorType::Biggs,
+        OperatorType::Admin,
+        OperatorType::Charm,
+        OperatorType::Rich,
+    ];
 
     #[test_case(1, Difficulty::Easy)]
     #[test_case(2, Difficulty::Easy)]
@@ -74,57 +108,77 @@ mod tests {
     #[test_case(7, Difficulty::Easy)]
     #[test_case(7, Difficulty::Normal)]
     fn sets_up_game(operators: usize, difficulty: Difficulty) {
-        let operator_order = [
-            OperatorType::Stone,
-            OperatorType::Sniper,
-            OperatorType::Rogue,
-            OperatorType::Biggs,
-            OperatorType::Admin,
-            OperatorType::Charm,
-            OperatorType::Rich,
-        ];
-        let chosen_operators = &operator_order[0..operators];
+        let chosen_operators = &OPERATORS[0..operators];
         let (firewall_mod, hacker_mult) = difficulty_mod(&difficulty);
 
         let config = GameConfig::new(
             difficulty,
-            ArrayVec::from_iter(chosen_operators.iter().map(|x| *x)),
+            ArrayVec::from_iter(chosen_operators.iter().copied()),
         )
         .unwrap();
 
-        let state = setup_game(&config);
+        let state = TableState::setup_game(&config);
         assert_eq!(
-            state.firewalls(),
+            state.firewalls,
             (operators + firewall_mod) as u8,
             "firewalls = operators + 2"
         );
-        assert_eq!(state.databases(), [true; 3]);
-        assert_eq!(state.webservices(), [true; 6]);
+        assert_eq!(state.databases, [true; 3]);
+        assert_eq!(state.webservices, [true; 6]);
 
         assert_eq!(
-            state.hackers().len(),
+            state.hackers.len(),
             operators * hacker_mult,
             "hackers = operators * 7"
         );
-        for hacker in state.hackers().iter() {
+        for hacker in state.hackers.iter() {
             assert!(!hacker.face_up, "face down");
             let hacker = defs::hacker(hacker.hacker);
             assert!(hacker.value() <= 4, "not lieutenant or boss")
         }
 
-        assert!(state.discard().is_empty());
-        assert!(state.breach().is_empty());
-        assert_eq!(state.round(), 0);
-        assert_eq!(state.active_operator(), 0);
+        assert!(state.discard.is_empty());
+        assert!(state.breach.is_empty());
+        assert_eq!(state.round, 0);
+        assert_eq!(state.active_operator, 0);
 
-        assert_eq!(state.operators().len(), operators);
-        for (i, operator) in state.operators().iter().enumerate() {
-            assert_eq!(operator.secure_slots(), [NO_HACKER; 3]);
-            assert!(operator.backtrace_list().is_empty());
-            assert_eq!(operator.skills().len(), 1);
-            assert_eq!(operator.skills()[0], operator_order[i]);
+        assert_eq!(state.operators.len(), operators);
+        for (i, operator) in state.operators.iter().enumerate() {
+            assert_eq!(operator.secure_slots, [NO_HACKER; 3]);
+            assert!(operator.backtrace_list.is_empty());
+            assert_eq!(operator.skills.len(), 1);
+            assert_eq!(operator.skills[0], OPERATORS[i]);
         }
 
-        assert!(matches!(state.choice_state(), ChooseAction(0)));
+        assert!(matches!(state.choice_state, ChooseAction(0)));
+    }
+
+    #[test_case(1, false)]
+    #[test_case(1, true)]
+    #[test_case(7, true)]
+    #[test_case(7, false)]
+    fn valid_choice_choose_action(operators: usize, has_hackers: bool) {
+        let chosen_operators = &OPERATORS[0..operators];
+        let mut state = TableState::setup_game(
+            &GameConfig::new(
+                Difficulty::Easy,
+                ArrayVec::from_iter(chosen_operators.iter().copied()),
+            )
+            .unwrap(),
+        );
+        if !has_hackers {
+            state.hackers.clear();
+        }
+        let choices = state.valid_choices();
+        let mut expected_choices = vec![Choice::Idle];
+        if has_hackers {
+            expected_choices.push(Choice::Face);
+        }
+        for i in 0..operators {
+            if i != state.active_operator as usize {
+                expected_choices.push(Choice::Assist(i as OperatorID));
+            }
+        }
+        assert_that(&choices.iter()).equals_iterator(&expected_choices.iter());
     }
 }

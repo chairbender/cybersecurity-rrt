@@ -1,13 +1,16 @@
 /// Actual logic to run a complete game
 use super::{GameConfig, TableState};
 use crate::defs;
-use crate::defs::OperatorType;
+use crate::defs::{OperatorType, NO_HACKER};
 use crate::game::ChoiceState::ChooseAction;
 use crate::game::Difficulty::Easy;
-use crate::game::{Choice, Difficulty, HackerCard, HackerDeck, OperatorID, OperatorState};
+use crate::game::{
+    Choice, Difficulty, HackerCard, HackerDeck, OperatorID, OperatorState, TableEvent,
+};
 use arrayvec::ArrayVec;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::Rng;
+use TableEvent::*;
 
 impl TableState {
     /// Returns a tablestate fully setup in accordance with
@@ -22,6 +25,7 @@ impl TableState {
             breach: HackerDeck::new(),
             discard: HackerDeck::new(),
             round: 0,
+            facing: NO_HACKER,
             active_operator: 0,
             operators: init_operators(&config.operators),
             choice_state: ChooseAction(0),
@@ -44,6 +48,32 @@ impl TableState {
                 choices
             }
             _ => panic!("choice state not implemented"),
+        }
+    }
+
+    /// Perform the indicated action. TableState will be updated until next choice state is
+    /// reached. Returns a vec consisting of events that occurred during the updates, in the
+    /// order they happened.
+    pub fn choose(&self, choice: Choice) -> Vec<TableEvent> {
+        match choice {
+            _ => panic!("choice not implemented"),
+        }
+    }
+
+    /// Update TableState corresponding with what the event says to do.
+    fn perform(&mut self, event: TableEvent) {
+        match event {
+            FirewallDelta(delta) => {
+                let result = (self.firewalls as i8) + delta;
+                if !(0..=3).contains(&result) {
+                    panic!(
+                        "delta out of range - firewalls must remain between 0..3, cur {} delta {}",
+                        self.firewalls, delta
+                    );
+                }
+                self.firewalls = result as u8;
+            }
+            _ => panic!("event not implemented"),
         }
     }
 }
@@ -100,6 +130,11 @@ mod tests {
         OperatorType::Rich,
     ];
 
+    fn get_operators(operators: usize) -> ArrayVec<OperatorType, 7> {
+        let chosen_operators = &OPERATORS[0..operators];
+        ArrayVec::from_iter(chosen_operators.iter().copied())
+    }
+
     #[test_case(1, Difficulty::Easy)]
     #[test_case(2, Difficulty::Easy)]
     #[test_case(3, Difficulty::Hard)]
@@ -108,14 +143,8 @@ mod tests {
     #[test_case(7, Difficulty::Easy)]
     #[test_case(7, Difficulty::Normal)]
     fn sets_up_game(operators: usize, difficulty: Difficulty) {
-        let chosen_operators = &OPERATORS[0..operators];
         let (firewall_mod, hacker_mult) = difficulty_mod(&difficulty);
-
-        let config = GameConfig::new(
-            difficulty,
-            ArrayVec::from_iter(chosen_operators.iter().copied()),
-        )
-        .unwrap();
+        let config = GameConfig::new(difficulty, get_operators(operators)).unwrap();
 
         let state = TableState::setup_game(&config);
         assert_eq!(
@@ -160,11 +189,7 @@ mod tests {
     fn valid_choice_choose_action(operators: usize, has_hackers: bool) {
         let chosen_operators = &OPERATORS[0..operators];
         let mut state = TableState::setup_game(
-            &GameConfig::new(
-                Difficulty::Easy,
-                ArrayVec::from_iter(chosen_operators.iter().copied()),
-            )
-            .unwrap(),
+            &GameConfig::new(Difficulty::Easy, get_operators(operators)).unwrap(),
         );
         if !has_hackers {
             state.hackers.clear();
@@ -180,5 +205,42 @@ mod tests {
             }
         }
         assert_that(&choices.iter()).equals_iterator(&expected_choices.iter());
+    }
+
+    fn choose_face() {
+        // TODO: Implement tests
+        panic!("fail");
+    }
+
+    #[test_case(2, 1)]
+    #[test_case(1, -1)]
+    #[test_case(3, -2)]
+    #[test_case(3, -3)]
+    #[test_case(0, 3)]
+    fn perform_firewall_delta_valid(initial: u8, delta: i8) {
+        let state = firewall_delta(initial, delta);
+        assert_that(&state.firewalls).is_equal_to(((initial as i8) + delta) as u8);
+    }
+    #[test]
+    #[should_panic(
+        expected = "delta out of range - firewalls must remain between 0..3, cur 0 delta -1"
+    )]
+    fn perform_firewall_delta_invalid() {
+        firewall_delta(0, -1);
+    }
+    #[test]
+    #[should_panic(
+        expected = "delta out of range - firewalls must remain between 0..3, cur 2 delta 2"
+    )]
+    fn perform_firewall_delta_invalid_2() {
+        firewall_delta(2, 2);
+    }
+
+    fn firewall_delta(initial: u8, delta: i8) -> TableState {
+        let mut state =
+            TableState::setup_game(&GameConfig::new(Difficulty::Easy, get_operators(2)).unwrap());
+        state.firewalls = initial;
+        state.perform(FirewallDelta(delta));
+        state
     }
 }

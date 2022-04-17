@@ -78,6 +78,9 @@ pub struct TableState {
     discard: HackerDeck,
     /// round 0, 1, or 2
     round: u8,
+    /// Card currently being faced by active_operator, NO_HACKER if
+    /// none currently being faced
+    facing: HackerID,
     active_operator: OperatorID,
     /// Status of each operator, corresponds with GameConfig.operators
     operators: ArrayVec<OperatorState, 7>,
@@ -121,6 +124,8 @@ pub struct OperatorState {
     burnout: bool,
     /// whether they are in desperation mode
     desperation: bool,
+    /// whether they are idling for the remainder of the round
+    idle: bool,
     /// which skills the operator currently has, including their own + any assist
     skills: ArrayVec<OperatorType, 7>,
 }
@@ -133,6 +138,7 @@ impl OperatorState {
             backtrace_list: ArrayVec::new(),
             burnout: false,
             desperation: false,
+            idle: false,
             skills: ArrayVec::from_iter([*operator]),
         };
     }
@@ -184,6 +190,33 @@ pub enum Choice {
     /// Do nothing for he remainder of the round (also no longer suffer the penalty of the
     /// last raider in the backtrace list)
     Idle,
+}
+
+/// All events which occurred on the table during
+/// processing of a choice - any time table state is modified
+/// in a way which is visible to the players, a corresponding event
+/// is emitted.
+#[derive(PartialEq, Debug)]
+pub enum TableEvent {
+    /// firewall was added or removed - delta from previous value
+    /// of TableState.firewalls
+    FirewallDelta(i8),
+    /// Database was removed, index of the DB in TableState.databases
+    DatabaseRemove(u8),
+    /// Webservice was removed, index of the WS in TableState.webservices
+    WebserviceRemove(u8),
+    /// top card from hacker stack revealed to active operator
+    /// (in TableState.facing)
+    Face,
+    /// assist token given from active operator to specified operator
+    /// as seen in TableState.operators[].skills
+    Assist(OperatorID),
+    /// active operator now idle for remainder of round, as seen
+    /// in TableState.operators[].idle
+    Idle,
+    /// active operator changed to specified OperatorId
+    ActiveOperator(OperatorID),
+    // TODO: Add more as needed
 }
 
 #[cfg(test)]

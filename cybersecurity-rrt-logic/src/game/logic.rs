@@ -125,6 +125,15 @@ impl TableState {
                 }
                 self.webservices[idx] = false;
             }
+            Face => {
+                if self.facing != NO_HACKER {
+                    panic!("active operator already facing a hacker");
+                }
+                self.facing = match self.hackers.pop() {
+                    Some(x) => x.hacker,
+                    None => panic!("no hackers left to face"),
+                };
+            }
             _ => panic!("event not implemented"),
         }
     }
@@ -163,6 +172,10 @@ mod tests {
 
     fn initial_state_easy() -> TableState {
         initial_state(Difficulty::Easy)
+    }
+
+    fn initial_state_operators(operators: usize) -> TableState {
+        TableState::setup_game(&GameConfig::new(Easy, get_operators(operators)).unwrap())
     }
 
     #[test_case(1, Difficulty::Easy)]
@@ -217,8 +230,7 @@ mod tests {
     #[test_case(7, true)]
     #[test_case(7, false)]
     fn valid_choice_choose_action(operators: usize, has_hackers: bool) {
-        let mut state =
-            TableState::setup_game(&GameConfig::new(Easy, get_operators(operators)).unwrap());
+        let mut state = initial_state_operators(operators);
         if !has_hackers {
             state.hackers.clear();
         }
@@ -324,5 +336,59 @@ mod tests {
         state.webservices = initial;
         state.perform(WebserviceRemove(idx));
         state
+    }
+
+    #[test]
+    fn perform_face() {
+        let mut state = initial_state_easy();
+        let top_hacker = state.hackers.last().unwrap().hacker;
+        let expected_hackers: Vec<HackerCard> = state
+            .hackers
+            .iter()
+            .copied()
+            .take(state.hackers.len() - 1)
+            .collect();
+        state.perform(Face);
+        assert_that(&state.facing).is_equal_to(top_hacker);
+        assert_that(&state.hackers.iter()).equals_iterator(&expected_hackers.iter())
+    }
+
+    #[test]
+    #[should_panic(expected = "active operator already facing a hacker")]
+    fn perform_face_twice() {
+        let mut state = initial_state_easy();
+        state.perform(Face);
+        state.perform(Face);
+    }
+
+    #[test]
+    #[should_panic(expected = "no hackers left to face")]
+    fn perform_face_empty_hacker() {
+        let mut state = initial_state_easy();
+        state.hackers.clear();
+        state.perform(Face);
+    }
+
+    #[test]
+    fn perform_assist() {
+        let mut state = initial_state_operators(7);
+        state.perform(Assist(3));
+        assert!(state.operators[0].skills.is_empty());
+        assert_that(&state.operators[3].skills.iter())
+            .equals_iterator(&[OperatorType::Biggs, OperatorType::Stone].iter());
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid OperatorID 4, must be 0..=2")]
+    fn perform_assist_invalid_id() {
+        let mut state = initial_state_operators(3);
+        state.perform(Assist(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid OperatorID 0, cannot assist self")]
+    fn perform_assist_invalid_id_2() {
+        let mut state = initial_state_operators(3);
+        state.perform(Assist(0));
     }
 }

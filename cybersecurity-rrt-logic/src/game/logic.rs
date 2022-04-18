@@ -10,7 +10,39 @@ use crate::game::{
 use arrayvec::ArrayVec;
 use rand::seq::{IteratorRandom, SliceRandom};
 use rand::Rng;
+use std::process::id;
 use TableEvent::*;
+
+// TODO: Convert to impl
+/// Gets (firewall mod, hacker_multiplier) depending on difficulty
+fn difficulty_mod(difficulty: &Difficulty) -> (usize, usize) {
+    match difficulty {
+        Easy => (3, 6),
+        Normal => (2, 7),
+        Hard => (1, 7),
+        Heroic => (0, 7),
+    }
+}
+
+fn init_operators(operators: &ArrayVec<OperatorType, 7>) -> ArrayVec<OperatorState, 7> {
+    ArrayVec::from_iter(operators.iter().map(|x| OperatorState::new(x)))
+}
+
+/// Shuffle initial hacker deck, with `hackers` number of hacker
+/// cards, chosen randomly without replacement from 1-4 value range
+fn shuffle(hackers: usize) -> HackerDeck {
+    // TODO: Is there a more efficient way?
+    let mut rng = rand::thread_rng();
+    let mut valid_hackers: Vec<HackerCard> = defs::HACKERS
+        .iter()
+        .enumerate()
+        .filter(|(_, x)| x.value() <= 4)
+        .map(|(x, _)| HackerCard::new(x as u8))
+        .collect();
+    valid_hackers.shuffle(&mut rng);
+
+    return HackerDeck::from_iter(valid_hackers.iter().take(hackers).map(|x| *x));
+}
 
 impl TableState {
     /// Returns a tablestate fully setup in accordance with
@@ -67,46 +99,25 @@ impl TableState {
                 let result = (self.firewalls as i8) + delta;
                 if !(0..=3).contains(&result) {
                     panic!(
-                        "delta out of range - firewalls must remain between 0..3, cur {} delta {}",
+                        "delta out of range - firewalls must remain between 0..=3, cur {} delta {}",
                         self.firewalls, delta
                     );
                 }
                 self.firewalls = result as u8;
             }
+            DatabaseRemove(idx) => {
+                if !(0..3).contains(&idx) {
+                    panic!("database index out of range, must be 0..=2, was {}", idx);
+                }
+                let idx = idx as usize;
+                if !self.databases[idx] {
+                    panic!("database index {} already removed", idx);
+                }
+                self.databases[idx] = false;
+            }
             _ => panic!("event not implemented"),
         }
     }
-}
-
-// TODO: Convert to impl
-/// Gets (firewall mod, hacker_multiplier) depending on difficulty
-fn difficulty_mod(difficulty: &Difficulty) -> (usize, usize) {
-    match difficulty {
-        Easy => (3, 6),
-        Normal => (2, 7),
-        Hard => (1, 7),
-        Heroic => (0, 7),
-    }
-}
-
-fn init_operators(operators: &ArrayVec<OperatorType, 7>) -> ArrayVec<OperatorState, 7> {
-    ArrayVec::from_iter(operators.iter().map(|x| OperatorState::new(x)))
-}
-
-/// Shuffle initial hacker deck, with `hackers` number of hacker
-/// cards, chosen randomly without replacement from 1-4 value range
-fn shuffle(hackers: usize) -> HackerDeck {
-    // TODO: Is there a more efficient way?
-    let mut rng = rand::thread_rng();
-    let mut valid_hackers: Vec<HackerCard> = defs::HACKERS
-        .iter()
-        .enumerate()
-        .filter(|(_, x)| x.value() <= 4)
-        .map(|(x, _)| HackerCard::new(x as u8))
-        .collect();
-    valid_hackers.shuffle(&mut rng);
-
-    return HackerDeck::from_iter(valid_hackers.iter().take(hackers).map(|x| *x));
 }
 
 #[cfg(test)]
@@ -133,6 +144,15 @@ mod tests {
     fn get_operators(operators: usize) -> ArrayVec<OperatorType, 7> {
         let chosen_operators = &OPERATORS[0..operators];
         ArrayVec::from_iter(chosen_operators.iter().copied())
+    }
+
+    /// Basic initial state with easy difficulty and 2 operators
+    fn initial_state(difficulty: Difficulty) -> TableState {
+        TableState::setup_game(&GameConfig::new(difficulty, get_operators(2)).unwrap())
+    }
+
+    fn initial_state_easy() -> TableState {
+        initial_state(Difficulty::Easy)
     }
 
     #[test_case(1, Difficulty::Easy)]
@@ -187,10 +207,8 @@ mod tests {
     #[test_case(7, true)]
     #[test_case(7, false)]
     fn valid_choice_choose_action(operators: usize, has_hackers: bool) {
-        let chosen_operators = &OPERATORS[0..operators];
-        let mut state = TableState::setup_game(
-            &GameConfig::new(Difficulty::Easy, get_operators(operators)).unwrap(),
-        );
+        let mut state =
+            TableState::setup_game(&GameConfig::new(Easy, get_operators(operators)).unwrap());
         if !has_hackers {
             state.hackers.clear();
         }
@@ -212,35 +230,63 @@ mod tests {
         panic!("fail");
     }
 
-    #[test_case(2, 1)]
-    #[test_case(1, -1)]
-    #[test_case(3, -2)]
-    #[test_case(3, -3)]
-    #[test_case(0, 3)]
-    fn perform_firewall_delta_valid(initial: u8, delta: i8) {
+    #[test_case(2, 1, 3)]
+    #[test_case(1, -1, 0)]
+    #[test_case(3, -2, 1)]
+    #[test_case(3, -3, 0)]
+    #[test_case(0, 3, 3)]
+    fn perform_firewall_delta_valid(initial: u8, delta: i8, expected: u8) {
         let state = firewall_delta(initial, delta);
-        assert_that(&state.firewalls).is_equal_to(((initial as i8) + delta) as u8);
+        assert_that(&state.firewalls).is_equal_to(expected);
     }
+
     #[test]
     #[should_panic(
-        expected = "delta out of range - firewalls must remain between 0..3, cur 0 delta -1"
+        expected = "delta out of range - firewalls must remain between 0..=3, cur 0 delta -1"
     )]
     fn perform_firewall_delta_invalid() {
         firewall_delta(0, -1);
     }
+
     #[test]
     #[should_panic(
-        expected = "delta out of range - firewalls must remain between 0..3, cur 2 delta 2"
+        expected = "delta out of range - firewalls must remain between 0..=3, cur 2 delta 2"
     )]
     fn perform_firewall_delta_invalid_2() {
         firewall_delta(2, 2);
     }
 
     fn firewall_delta(initial: u8, delta: i8) -> TableState {
-        let mut state =
-            TableState::setup_game(&GameConfig::new(Difficulty::Easy, get_operators(2)).unwrap());
+        let mut state = initial_state_easy();
         state.firewalls = initial;
         state.perform(FirewallDelta(delta));
+        state
+    }
+
+    #[test_case([false, true, false], 1, [false, false, false])]
+    #[test_case([true, true, false], 0, [false, true, false])]
+    #[test_case([true, true, true], 2, [true, true, false])]
+    fn perform_database_remove_valid(initial: [bool; 3], delta: u8, expected: [bool; 3]) {
+        let state = database_remove(initial, delta);
+        assert_that(&state.databases).is_equal_to(&expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "database index out of range, must be 0..=2, was 3")]
+    fn perform_database_remove_invalid() {
+        database_remove([true, false, true], 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "database index 1 already removed")]
+    fn perform_database_remove_invalid_2() {
+        database_remove([true, false, true], 1);
+    }
+
+    fn database_remove(initial: [bool; 3], delta: u8) -> TableState {
+        let mut state = initial_state_easy();
+        state.databases = initial;
+        state.perform(DatabaseRemove(delta));
         state
     }
 }

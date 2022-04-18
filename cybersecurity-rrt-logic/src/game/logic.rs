@@ -115,6 +115,16 @@ impl TableState {
                 }
                 self.databases[idx] = false;
             }
+            WebserviceRemove(idx) => {
+                if !(0..5).contains(&idx) {
+                    panic!("webservice index out of range, must be 0..=5, was {}", idx);
+                }
+                let idx = idx as usize;
+                if !self.webservices[idx] {
+                    panic!("webservice index {} already removed", idx);
+                }
+                self.webservices[idx] = false;
+            }
             _ => panic!("event not implemented"),
         }
     }
@@ -283,10 +293,36 @@ mod tests {
         database_remove([true, false, true], 1);
     }
 
-    fn database_remove(initial: [bool; 3], delta: u8) -> TableState {
+    fn database_remove(initial: [bool; 3], idx: u8) -> TableState {
         let mut state = initial_state_easy();
         state.databases = initial;
-        state.perform(DatabaseRemove(delta));
+        state.perform(DatabaseRemove(idx));
+        state
+    }
+    #[test_case([false, true, false, false, false, false], 1, [false, false, false, false, false, false])]
+    #[test_case([true, true, false, false, false, false], 0, [false, true, false, false, false, false])]
+    #[test_case([true, true, true, false, false, false], 2, [true, true, false, false, false, false])]
+    fn perform_webservice_remove_valid(initial: [bool; 6], delta: u8, expected: [bool; 6]) {
+        let state = webservice_remove(initial, delta);
+        assert_that(&state.webservices).is_equal_to(&expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "webservice index out of range, must be 0..=5, was 6")]
+    fn perform_webservice_remove_invalid() {
+        webservice_remove([true, false, true, false, false, false], 6);
+    }
+
+    #[test]
+    #[should_panic(expected = "webservice index 1 already removed")]
+    fn perform_webservice_remove_invalid_2() {
+        webservice_remove([true, false, true, false, false, false], 1);
+    }
+
+    fn webservice_remove(initial: [bool; 6], idx: u8) -> TableState {
+        let mut state = initial_state_easy();
+        state.webservices = initial;
+        state.perform(WebserviceRemove(idx));
         state
     }
 }

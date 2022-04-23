@@ -125,6 +125,16 @@ impl TableState {
                 }
                 self.webservices[idx] = false;
             }
+            Face => {
+                if self.facing != NO_HACKER {
+                    panic!("cannot face, already facing HackerID {}", self.facing);
+                }
+                if self.hackers.is_empty() {}
+                match self.hackers.pop() {
+                    Some(x) => self.facing = x.hacker,
+                    None => panic!("cannot face, hacker deck is empty"),
+                }
+            }
             _ => panic!("event not implemented"),
         }
     }
@@ -235,15 +245,10 @@ mod tests {
         assert_that(&choices.iter()).equals_iterator(&expected_choices.iter());
     }
 
-    fn choose_face() {
-        // TODO: Implement tests
-        panic!("fail");
-    }
-
     #[test_case(2, 1, 3)]
-    #[test_case(1, -1, 0)]
-    #[test_case(3, -2, 1)]
-    #[test_case(3, -3, 0)]
+    #[test_case(1, - 1, 0)]
+    #[test_case(3, - 2, 1)]
+    #[test_case(3, - 3, 0)]
     #[test_case(0, 3, 3)]
     fn perform_firewall_delta_valid(initial: u8, delta: i8, expected: u8) {
         let state = firewall_delta(initial, delta);
@@ -299,6 +304,7 @@ mod tests {
         state.perform(DatabaseRemove(idx));
         state
     }
+
     #[test_case([false, true, false, false, false, false], 1, [false, false, false, false, false, false])]
     #[test_case([true, true, false, false, false, false], 0, [false, true, false, false, false, false])]
     #[test_case([true, true, true, false, false, false], 2, [true, true, false, false, false, false])]
@@ -324,5 +330,31 @@ mod tests {
         state.webservices = initial;
         state.perform(WebserviceRemove(idx));
         state
+    }
+
+    #[test]
+    fn perform_face() {
+        let mut state = initial_state_easy();
+        let mut expected_hackers = state.hackers.clone();
+        let expected_face = expected_hackers.pop().unwrap();
+        state.perform(Face);
+        assert_that(&state.hackers.iter()).equals_iterator(&expected_hackers.iter());
+        assert_that(&state.facing).is_equal_to(&expected_face.hacker);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot face, hacker deck is empty")]
+    fn perform_face_invalid_deck() {
+        let mut state = initial_state_easy();
+        state.hackers.clear();
+        state.perform(Face);
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot face, already facing HackerID 3")]
+    fn perform_face_already_facing() {
+        let mut state = initial_state_easy();
+        state.facing = 3;
+        state.perform(Face);
     }
 }

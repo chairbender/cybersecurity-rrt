@@ -95,7 +95,7 @@ type OperatorID = u8;
 /// a deck of hacker cards. The top is the end of the vec, bottom is the start.
 type HackerDeck = ArrayVec<HackerCard, 66>;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct HackerCard {
     hacker: HackerID,
     /// true if faceup (visible to players), otherwise facedown

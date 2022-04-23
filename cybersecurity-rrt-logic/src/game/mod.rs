@@ -62,7 +62,8 @@ pub enum Difficulty {
 
 /// Entire state of an ongoing game. This + a GameConfig should contain EVERYTHING needed
 /// to fully describe a state of the game (i.e., a snapshot of this would allow
-/// saving / resuming the game).
+/// saving / resuming the game). This should generally not be mutated directly,
+/// but should instead be mutated using the `perform` method.
 pub struct TableState {
     /// amount of firewalls still standing
     firewalls: u8,
@@ -86,6 +87,14 @@ pub struct TableState {
     operators: ArrayVec<OperatorState, 7>,
     /// current decision that needs to be made by a operator
     choice_state: ChoiceState,
+}
+
+impl TableState {
+    pub fn active_operator(&mut self) -> &mut OperatorState {
+        self.operators
+            .get_mut(self.active_operator as usize)
+            .unwrap()
+    }
 }
 
 /// Operator in current game. Index in TableState.operators and GameConfig.operators
@@ -156,6 +165,7 @@ impl OperatorState {
 /// Note we have active_operator in the game state, but some of these enums
 /// still have a OperatorID - this is because sometimes choices need to be
 /// made by operators other than the active operator.
+#[derive(PartialEq, Debug)]
 pub enum ChoiceState {
     /// Specific operator must decide whether to use their Flow or not
     Flow(OperatorID),
@@ -195,7 +205,9 @@ pub enum Choice {
 /// All events which occurred on the table during
 /// processing of a choice - any time table state is modified
 /// in a way which is visible to the players, a corresponding event
-/// is emitted.
+/// is emitted. This is also the primary way the table state is actually mutated -
+/// generally tablestate should not be updated directly, but should instead be mutated
+/// using the `perform` method.
 #[derive(PartialEq, Debug)]
 pub enum TableEvent {
     /// firewall was added or removed - delta from previous value
@@ -216,6 +228,8 @@ pub enum TableEvent {
     Idle,
     /// active operator changed to specified OperatorId
     ActiveOperator(OperatorID),
+    /// choice state was changed to indicated choice state
+    ChoiceState(ChoiceState),
     // TODO: Add more as needed
 }
 

@@ -135,6 +135,15 @@ impl TableState {
                     None => panic!("cannot face, hacker deck is empty"),
                 }
             }
+            Idle => {
+                if self.active_operator().idle {
+                    panic!(
+                        "cannot idle, operator {} already idle",
+                        self.active_operator
+                    );
+                }
+                self.active_operator().idle = true;
+            }
             _ => panic!("event not implemented"),
         }
     }
@@ -215,6 +224,7 @@ mod tests {
         for (i, operator) in state.operators.iter().enumerate() {
             assert_eq!(operator.secure_slots, [NO_HACKER; 3]);
             assert!(operator.backtrace_list.is_empty());
+            assert_that(&operator.idle).is_false();
             assert_eq!(operator.skills.len(), 1);
             assert_eq!(operator.skills[0], OPERATORS[i]);
         }
@@ -356,5 +366,20 @@ mod tests {
         let mut state = initial_state_easy();
         state.facing = 3;
         state.perform(Face);
+    }
+
+    #[test]
+    fn perform_idle() {
+        let mut state = initial_state_easy();
+        state.perform(Idle);
+        assert_that(&state.operators[0].idle).is_true();
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot idle, operator 0 already idle")]
+    fn perform_idle_invalid() {
+        let mut state = initial_state_easy();
+        state.operators[0].idle = true;
+        state.perform(Idle);
     }
 }

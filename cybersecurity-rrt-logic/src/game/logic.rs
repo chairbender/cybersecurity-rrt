@@ -144,6 +144,9 @@ impl TableState {
                 }
                 self.active_operator().idle = true;
             }
+            ChoiceState(x) => {
+                self.choice_state = x;
+            }
             _ => panic!("event not implemented"),
         }
     }
@@ -155,7 +158,7 @@ mod tests {
     use super::*;
     use crate::defs;
     use crate::defs::{OperatorType, NO_HACKER};
-    use crate::game::OperatorID;
+    use crate::game::{ChoiceState, OperatorID};
     use arrayvec::ArrayVec;
     use spectral::prelude::*;
     use test_case::test_case;
@@ -381,5 +384,12 @@ mod tests {
         let mut state = initial_state_easy();
         state.operators[0].idle = true;
         state.perform(Idle);
+    }
+
+    #[test]
+    fn perform_choice_state() {
+        let mut state = initial_state_easy();
+        state.perform(ChoiceState(ChoiceState::Face(3)));
+        assert_that(&state.choice_state).is_equal_to(ChoiceState::Face(3));
     }
 }
